@@ -22,4 +22,4 @@ pip install -r requirements.txt
     - 请参考 [adk-sample](sample/adk_sample.py)
 
 
-2. 或者使用`cline`构建cline
+2. 或者使用`cline`构建
