@@ -1,0 +1,2 @@
+fastmcp==2.2.6
+loguru==0.7.3
