@@ -176,3 +176,10 @@ cython_debug/
 .venv/
 
 .env/
+
+logs/
+
+sample/kb/
+
+
+.DS_Store

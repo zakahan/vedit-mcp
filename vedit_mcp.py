@@ -4,6 +4,14 @@ import subprocess
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from loguru import logger
+from logging import INFO
+# The description of the environment variables is as follows.
+# 1. `KB_BASE_PATH`：（Required）It is used to set the base path where various video files for operation are located. (For details, please check the code.)
+# 2. `MCP_USING_LOGGER`: (Optional) It is used to set whether to use the logger. If it is set to "True", 
+#                   the output will be generated. If it is not set or set to other values, no log will be output.
+# 3. `LOGGER_LEVEL`：(Optional) The log level. By default, it is set to the DEBUG level. You can set it 
+#                   to any one of "DEBUG", "INFO", "ERROR", and "WARNING" by yourself.
+# 4. `LOGGER_FILE_DIR`: (Required when `MCP_USING_LOGGER="True"`), The directory for log output. It is required that this directory must already exist. 
 
 # -----------------------------------------------------------------------------
 # Setting Environment Variable
@@ -11,7 +19,7 @@ from loguru import logger
 if os.getenv("MCP_USING_LOGGER") == "True":
     USING_LOGGER = True
 else:
-    USING_LOGGER = False
+    USING_LOGGER = False        # default
 # ---
 if os.getenv("MCP_LOGGER_LEVEL") is None:
     LOGGER_LEVEL = "DEBUG"
@@ -21,10 +29,10 @@ else:
 # LOGGER_FILE_DIR: this folder must：
 # This directory must already exist, and an mcp.log file will be created here to record logs. 
 # If you have any other ideas, please modify the code yourself.
-LOGGER_FILE_DIR = os.getenv("LOGGER_FILE_DIR")
+LOGGER_FILE_DIR = os.path.abspath(os.getenv("LOGGER_FILE_DIR"))
 
 # Video Folder Base
-KB_DIR = os.getenv("KB_BASE_PATH")
+KB_DIR = os.path.abspath(os.getenv("KB_BASE_PATH"))
 KB_CLIP = "clip"
 KB_MERGE = "merge"
 KB_RESULT = "result"
@@ -36,31 +44,43 @@ KB_RESULT = "result"
 def get_logger():
     if not USING_LOGGER:
         logger.remove()
+        return logger
+    
+    if LOGGER_LEVEL not in {"DEBUG", "INFO", "ERROR", "CRITICAL"}:
+        raise ValueError(f"`LOGGER_LEVEL` Error: the logger level is not exists: {LOGGER_LEVEL}")
+    
 
     if LOGGER_FILE_DIR is None:
-        raise ValueError("If you set `USING_LOGGER` to `True`, then you must configure " \
+        raise ValueError("`LOGGER_FILE_DIR` Error: If you set `USING_LOGGER` to `True`, then you must configure " \
         "the environment variable `LOGGER_FILE_DIR` and " \
         "ensure that this directory already exists. ")
 
     elif not os.path.exists(os.path.abspath(LOGGER_FILE_DIR)):
-        raise ValueError(f"The environment `LOGGER_FILE_DIR`={LOGGER_FILE_DIR} must already" \
+        raise ValueError(f"`LOGGER_FILE_DIR` Error: The environment `LOGGER_FILE_DIR`={LOGGER_FILE_DIR} must already" \
                          "exist, we can not find it now.")
+    
 
+    log_path = os.path.join(LOGGER_FILE_DIR, 'logs' ,'mcp.log')   
+    logger.add(log_path, rotation="500 MB", retention="10 days", level=LOGGER_LEVEL,
+               format="{time} | {level} | " + "__VEDIO_EDITOR_SERVER__" + ":{function}:{line} - {message}")
+    
+    return logger
 
 # Check the path
 def check_paths():
     if KB_DIR is None:
-        raise ValueError("KB_BASE_PATH is None, you must configure the environment variable " \
+        raise ValueError("`KB_BASE_PATH` Error: KB_BASE_PATH is None, you must configure the environment variable " \
         "KB_BASE_PATH and ensure that this path truly exists. The function of this path is to " \
         "store the original video files, temporary files, and result files.")
     
     elif not os.path.exists(os.path.abspath(KB_DIR)):
         raise ValueError(
-            f"The environment `KB_BASE_PATH`={KB_DIR} must already exist, we can not find it now.")
+            f"`KB_BASE_PATH` Error: The environment `KB_BASE_PATH`={KB_DIR} must already exist, we can not find it now.")
 
 
 
-
+logger = get_logger()
+check_paths()
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 # start of functions -----------------------------------------------------------
@@ -96,7 +116,8 @@ def clip_video(
     :param save_folder: The path of the folder where the cut video will be saved.
     :param start_time: The start time for cutting (in seconds; this time unit is sufficient for most operations).
     :param stop_time: The end time for cutting (in seconds).
-    :return: A tuple where the first element is a boolean indicating whether the operation was successful, the second element is the output location, and the third element is the log information.
+    :return: A tuple where the first element is a boolean indicating whether the operation was successful, 
+                the second element is the output location, and the third element is the log information.
     """
     logger.debug("-----------------------------------------------------------------------------")
     logger.debug("Parameter check <clip_video> ------------------------------------------------")
@@ -154,7 +175,8 @@ def merge_videos(video_paths: list[str], save_folder: str) -> tuple[bool, str, s
     Merge multiple local video files.
     :param video_paths: A list containing the paths of video files.
     :param save_folder: The folder where the merged video will be saved.
-    :return: A tuple where the first element is a boolean indicating whether the operation was successful, the second element is the output path, and the third element is the log information.
+    :return: A tuple where the first element is a boolean indicating whether the operation was successful, 
+                the second element is the output path, and the third element is the log information.
     """
     logger.debug("-----------------------------------------------------------------------------")
     logger.debug("Parameter check <merge_videos> ----------------------------------------------")
@@ -239,10 +261,7 @@ def copy_file(source_file: str, target_folder: str, rename: str) -> tuple[bool, 
 
 
 
-# MCP Service and Logger --------------------
-logger = get_logger()
-check_paths()
-
+# MCP Service  --------------------
 mcp = FastMCP(
     name="VideoEditorMCP",
     description="A video editing MCP tool service that has implemented " \
@@ -322,7 +341,7 @@ def merge_videos_tool(video_paths: list[str], task_id: str) -> dict:
 
     return {"success": success, "message": message, "output_path": output_path[len(KB_DIR)+1:]}
 
-
+@mcp.tool()
 def task_endding(task_id: str, source_file: str, title: str = "") -> str:
     """
     This function should be called every time a task ends to push the result document after task processing to the result folder.
@@ -330,9 +349,11 @@ def task_endding(task_id: str, source_file: str, title: str = "") -> str:
     task_id (str): Represents the ID of the current task, uniquely identifying the current task.
     source_file(str): Indicates the location of the result file to be pushed, 
     which is the file location provided after the previous process of this task ends.
-    title(str): If you need to modify the file name (note: including the file extension), use this parameter. Otherwise, keep the file name the same as that of the source_file or simply don't input this parameter as there is a default parameter here.
+    title(str): If you need to modify the file name (note: including the file extension), use this parameter.
+                Otherwise, keep the file name the same as that of the source_file or simply don't input this parameter as there is a default parameter here.
     Returns:
-    str: Returns "success" if successful, or an error message if failed. If an error occurs, notify the user of the reason for the error and apologize sincerely.
+    str: Returns "success" if successful, or an error message if failed. 
+         If an error occurs, notify the user of the reason for the error and apologize sincerely.
     """
     _source_file = os.path.join(KB_DIR, source_file)
     _target_dir = os.path.join(KB_DIR, KB_RESULT, task_id)
@@ -357,5 +378,5 @@ def task_endding(task_id: str, source_file: str, title: str = "") -> str:
 
 
 if __name__ == "__main__":
-    logger.info("Video Editor MCP Server Running......")
+    logger.info("Video Edit MCP Server Running......")
     mcp.run(transport='stdio')
