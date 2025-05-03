@@ -5,6 +5,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from loguru import logger
 from logging import INFO
+from typing import Optional
 # The description of the environment variables is as follows.
 # 1. `KB_BASE_PATH`：（Required）It is used to set the base path where various video files for operation are located. (For details, please check the code.)
 # 2. `MCP_USING_LOGGER`: (Optional) It is used to set whether to use the logger. If it is set to "True", 
@@ -36,6 +37,7 @@ KB_DIR = os.path.abspath(os.getenv("KB_BASE_PATH"))
 KB_CLIP = "clip"
 KB_MERGE = "merge"
 KB_RESULT = "result"
+KB_ADD = "add"      # add bgm, and add ... what i don't know.....
 
 # -----------------------------------------------------------------------------
 
@@ -169,7 +171,7 @@ def clip_video(
         logger.error(error_msg)
         return False, "", error_msg
     
-
+# merge_videos
 def merge_videos(video_paths: list[str], save_folder: str) -> tuple[bool, str, str]:
     """
     Merge multiple local video files.
@@ -238,6 +240,62 @@ def merge_videos(video_paths: list[str], save_folder: str) -> tuple[bool, str, s
             os.remove(temp_file_list)
 
 
+# add_audio_to_video
+def add_audio_to_video(video_path: str, audio_path: str, output_path: str, start_time: int = 0, audio_duration: Optional[int] = None) -> tuple[bool, str]:
+    logger.debug("-----------------------------------------------------------------------------")
+    logger.debug("Parameter check <add_audio_to_video> ----------------------------------------")
+    logger.debug(f"video_path: {video_path}")
+    logger.debug(f"audio_path: {audio_path}")
+    logger.debug(f"output_path: {output_path}")
+    logger.debug(f"start_time: {start_time}")
+    logger.debug(f"audio_duration: {audio_duration}")
+    logger.debug("-----------------------------------------------------------------------------")
+
+    # Get the duration of the video
+    ffprobe_cmd = [
+        'ffprobe',
+        '-v', 'error',
+        '-show_entries', 'format=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1',
+        video_path
+    ]
+    try:
+        video_duration = float(subprocess.check_output(ffprobe_cmd).decode().strip())
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error getting video duration: {e}")
+        return False, str(e)
+    except ValueError:
+        logger.error("Error parsing video duration.")
+        return False, str(e)
+
+    # If the audio duration is not specified, use the video duration
+    if audio_duration is None:
+        audio_duration = video_duration
+
+    # Build the FFmpeg command
+    ffmpeg_cmd = [
+        'ffmpeg',
+        '-i', video_path,
+        '-i', audio_path,
+        '-ss', str(start_time),
+        '-t', str(min(audio_duration, video_duration)),
+        '-filter_complex', '[0:a]volume=1[a1];[1:a]volume=1[a2];[a1][a2]amix=inputs=2:duration=first:dropout_transition=0[aout]',
+        '-map', '0:v',
+        '-map', '[aout]',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        output_path
+    ]
+
+    try:
+        # Execute the FFmpeg command
+        subprocess.run(ffmpeg_cmd, check=True)
+        logger.info(f"Successfully added audio to video. Output saved to {output_path}")
+        return True, "success"
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error adding audio to video: {e}")
+        return False, str(e)
+
 
 # copy file and rename
 def copy_file(source_file: str, target_folder: str, rename: str) -> tuple[bool, str]:
@@ -302,7 +360,7 @@ def clip_video_tool(
     # In fact, both the `original_video_path` and `output_path` are based on the `KB_DIR`, 
     # that is, in the form of `$KB_DIR/xxxxx`. 
     # 
-    # It is necessary to ensure that each input is based on the `KB_DIR``, 
+    # It is necessary to ensure that each input is based on the `KB_DIR`, 
     # and each output is also based on the KB. 
     # The reason for this design is mainly due to the concern that errors may occur 
     # when generating paths and other operations. 
@@ -340,6 +398,32 @@ def merge_videos_tool(video_paths: list[str], task_id: str) -> dict:
     success, output_path, message = merge_videos(_video_paths, _save_folder)
 
     return {"success": success, "message": message, "output_path": output_path[len(KB_DIR)+1:]}
+
+
+@mcp.tool()
+def add_bgm_tool(
+    video_path: str, audio_path: str, start_time: int=0, audio_duration: Optional[int]=None
+    ) -> dict:
+    """
+    This function is used to add background music to a video.
+
+    Parameters:
+    video_path (str): The path to the video file, which should be a string.
+    audio_path (str): The path to the audio file, which should be a string.
+    start_time (int, optional): The start time (in seconds) from which the audio will be added to the video. The default value is 0.
+    audio_duration (Optional[int], optional): The duration (in seconds) for which the audio will be added to the video. 
+                    If it is None, the full duration of the audio will be used.
+
+    Returns:
+    str: Returns "success" if successful, or an error message if failed. 
+         If an error occurs, notify the user of the reason for the error and apologize sincerely.
+    """
+    _video_path = os.path.join(KB_DIR, video_path)
+    _audio_path = os.path.join(KB_DIR, audio_path)
+    _output_path = os.path.join(KB_DIR, KB_ADD)
+    
+    _, msg = add_audio_to_video(_video_path, _audio_path, _output_path, start_time, audio_duration)
+    return msg
 
 @mcp.tool()
 def task_endding(task_id: str, source_file: str, title: str = "") -> str:
