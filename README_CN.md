@@ -84,8 +84,28 @@ python adk_sample.py
 
 #### 2.2 或者使用`cline`构建
 
-待补充
+首先请保证你的python环境以及ffmpeg配置正确
+配置cline_mcp_settings.json如下
+```json
+{
+  "mcpServers": {
+    "vedit-mcp": {
+      "command": "python",
+      "args": [
+        "vedit_mcp.py",
+        "--kb_dir",
+        "your-kb-dir-here"
+      ]
+    }
+  }
+}
+```
 
 #### 2.3. 使用stramlit web界面执行
 
 待补充
+
+
+### 3. 注意事项
+
+1. 建议使用`thinking-model`来处理这类任务，目前测试`thinking-model`的对这类任务处理似乎性能更好？但没进行过更深入的测试，这只是一个直观的感受。

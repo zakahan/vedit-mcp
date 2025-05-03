@@ -79,8 +79,29 @@ If you need secondary development, you can choose to add `vedit_mcp.py` to your 
 
 #### 2.2 Or build using `cline`
 
-To be supplemented
+
+Firstly, please ensure that your Python environment and ffmpeg configuration are correct
+Configure cline_mcp_settings. json as follows
+```json
+{
+  "mcpServers": {
+    "vedit-mcp": {
+      "command": "python",
+      "args": [
+        "vedit_mcp.py",
+        "--kb_dir",
+        "your-kb-dir-here"
+      ]
+    }
+  }
+}
+```
 
 #### 2.3. Execute using the stramlit web interface
 
 To be supplemented 
+
+
+### 3. precautions
+
+1. It is recommended to use the `thinking model` to handle this type of task. Currently, it seems that the `thinking model` performs better in handling this type of task? But no further testing has been conducted, it's just an intuitive feeling.

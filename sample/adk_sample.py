@@ -43,15 +43,14 @@ async def aget_video_editor_tools():
         connection_params=StdioServerParameters(
             command="python",
             args=[
-                VEDIT_MCP_PATH
+                VEDIT_MCP_PATH,
+                "--kb_dir",     # About `KB_BASE_PATH`: It is recommended to use absolute paths. If you use relative paths, 
+                "kb",           # they must be relative to the execute path.
+                "--using_logger",
+                "True",
+                "--logger_file_dir",
+                ".",            # Similar to KB_BASE_PATH, it is still a path relative to execute path.
             ],
-            env={
-                # About `KB_BASE_PATH`: It is recommended to use absolute paths. If you use relative paths, 
-                # they must be relative to the execute path.
-                "KB_BASE_PATH": "kb",      
-                "MCP_USING_LOGGER": "True",
-                "LOGGER_FILE_DIR": "."  # Similar to KB_BASE_PATH, it is still a path relative to execute path.
-            }
         )
     )
     logger.debug("Video Edit MCP Toolset Created Successfully.")

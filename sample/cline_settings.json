@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "vedit-mcp": {
+      "command": "python",
+      "args": [
+        "vedit_mcp.py",
+        "--kb_dir",
+        "your-kb-dir-here"
+      ]
+    }
+  }
+}

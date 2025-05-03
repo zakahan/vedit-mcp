@@ -1,39 +1,50 @@
 import os
 import shutil
+import argparse
 import subprocess
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from loguru import logger
 from logging import INFO
 from typing import Optional
-# The description of the environment variables is as follows.
-# 1. `KB_BASE_PATH`：（Required）It is used to set the base path where various video files for operation are located. (For details, please check the code.)
-# 2. `MCP_USING_LOGGER`: (Optional) It is used to set whether to use the logger. If it is set to "True", 
+# The description of the argument is as follows.
+# 1. `kb_dir`：（Required）It is used to set the base path where various video files for operation are located. (For details, please check the code.)
+# 2. `using_logger`: (Optional) It is used to set whether to use the logger. If it is set to "True", 
 #                   the output will be generated. If it is not set or set to other values, no log will be output.
-# 3. `LOGGER_LEVEL`：(Optional) The log level. By default, it is set to the DEBUG level. You can set it 
+# 3. `logger_level`:(Optional) The log level. By default, it is set to the DEBUG level. You can set it 
 #                   to any one of "DEBUG", "INFO", "ERROR", and "WARNING" by yourself.
-# 4. `LOGGER_FILE_DIR`: (Required when `MCP_USING_LOGGER="True"`), The directory for log output. It is required that this directory must already exist. 
+# 4. `logger_file_dir`: (Required when `using_logger="True"`), The directory for log output. It is required that this directory must already exist. 
 
 # -----------------------------------------------------------------------------
-# Setting Environment Variable
+# Setting Arguments Variable
 # Logging Configuration
-if os.getenv("MCP_USING_LOGGER") == "True":
+parser = argparse.ArgumentParser(description='Configure script parameters via command-line arguments')
+parser.add_argument('--using_logger', choices=['True', 'False'], default='False',
+                    help='Whether to use the logger. Valid values are True or False, default is False')
+parser.add_argument('--logger_file_dir', default=None,
+                    help='Directory for the log file. If the logger is used, this directory must be specified')
+parser.add_argument('--logger_level', default='DEBUG',
+                    help='Logging level for the logger, default is DEBUG')
+parser.add_argument('--kb_dir', default=None,
+                    help='Base path for the video folder')
+args = parser.parse_args()
+
+if args.using_logger == "True":
     USING_LOGGER = True
+    LOGGER_FILE_DIR = args.logger_file_dir
 else:
     USING_LOGGER = False        # default
+    LOGGER_FILE_DIR = None
 # ---
-if os.getenv("MCP_LOGGER_LEVEL") is None:
-    LOGGER_LEVEL = "DEBUG"
-else:
-    LOGGER_LEVEL = os.getenv("MCP_LOGGER_LEVEL")
+LOGGER_LEVEL = args.logger_level
 
 # LOGGER_FILE_DIR: this folder must：
 # This directory must already exist, and an mcp.log file will be created here to record logs. 
 # If you have any other ideas, please modify the code yourself.
-LOGGER_FILE_DIR = os.path.abspath(os.getenv("LOGGER_FILE_DIR"))
+
 
 # Video Folder Base
-KB_DIR = os.path.abspath(os.getenv("KB_BASE_PATH"))
+KB_DIR = args.kb_dir
 KB_CLIP = "clip"
 KB_MERGE = "merge"
 KB_RESULT = "result"
@@ -49,16 +60,16 @@ def get_logger():
         return logger
     
     if LOGGER_LEVEL not in {"DEBUG", "INFO", "ERROR", "CRITICAL"}:
-        raise ValueError(f"`LOGGER_LEVEL` Error: the logger level is not exists: {LOGGER_LEVEL}")
+        raise ValueError(f"`logger_level` Error: the logger level is not exists: {LOGGER_LEVEL}")
     
 
     if LOGGER_FILE_DIR is None:
-        raise ValueError("`LOGGER_FILE_DIR` Error: If you set `USING_LOGGER` to `True`, then you must configure " \
-        "the environment variable `LOGGER_FILE_DIR` and " \
+        raise ValueError("`logger_file_dir` Error: If you set `using_logger` to `True`, then you must configure " \
+        "the argument variable `logger_file_dir` and " \
         "ensure that this directory already exists. ")
 
     elif not os.path.exists(os.path.abspath(LOGGER_FILE_DIR)):
-        raise ValueError(f"`LOGGER_FILE_DIR` Error: The environment `LOGGER_FILE_DIR`={LOGGER_FILE_DIR} must already" \
+        raise ValueError(f"`logger_file_dir` Error: The argument `logger_file_dir`={LOGGER_FILE_DIR} must already" \
                          "exist, we can not find it now.")
     
 
@@ -71,13 +82,13 @@ def get_logger():
 # Check the path
 def check_paths():
     if KB_DIR is None:
-        raise ValueError("`KB_BASE_PATH` Error: KB_BASE_PATH is None, you must configure the environment variable " \
-        "KB_BASE_PATH and ensure that this path truly exists. The function of this path is to " \
+        raise ValueError("`kb_dir` Error: KB_DIR is None, you must configure the argument variable " \
+        "KB_DIR and ensure that this path truly exists. The function of this path is to " \
         "store the original video files, temporary files, and result files.")
     
     elif not os.path.exists(os.path.abspath(KB_DIR)):
         raise ValueError(
-            f"`KB_BASE_PATH` Error: The environment `KB_BASE_PATH`={KB_DIR} must already exist, we can not find it now.")
+            f"`kb_dir` Error: The argument `kb_dir`={KB_DIR} must already exist, we can not find it now.")
 
 
 
@@ -305,13 +316,17 @@ def copy_file(source_file: str, target_folder: str, rename: str) -> tuple[bool, 
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
 
-    # Build target file and rename
-    target_file = os.path.join(target_folder, rename)
+    # 提取源文件的后缀
+    _, file_extension = os.path.splitext(source_file)
+    # 构建包含后缀的目标文件名
+    target_file = os.path.join(target_folder, rename + file_extension)
 
-    # Copy File
-    shutil.copy2(source_file, target_file)
-    return True, "success"
-
+    try:
+        # 复制文件
+        shutil.copy2(source_file, target_file)
+        return True, "success"
+    except Exception as e:
+        return False, f"Error occurred while copying: {str(e)}"
 
 # end of functions -------------------------------------------------------------
 # ------------------------------------------------------------------------------
@@ -349,7 +364,7 @@ def clip_video_tool(
     task_id (str): The unique identifier for the clipping task.
     start_time (int): The start time (in some appropriate unit) for the clipping.
     stop_time (int): The stop time (in some appropriate unit) for the clipping.
-    task_id (str): title: the title of the clipping.
+    title (str): title: the title of the clipping.(This item does not include suffix names)
     Returns:
     dict: A dictionary containing the result of the clipping operation.
           The dictionary has the following keys:
@@ -430,11 +445,12 @@ def task_endding(task_id: str, source_file: str, title: str = "") -> str:
     """
     This function should be called every time a task ends to push the result document after task processing to the result folder.
     Parameters:
-    task_id (str): Represents the ID of the current task, uniquely identifying the current task.
+    task_id (str): uniquely identifying the current task.
     source_file(str): Indicates the location of the result file to be pushed, 
     which is the file location provided after the previous process of this task ends.
     title(str): If you need to modify the file name (note: including the file extension), use this parameter.
                 Otherwise, keep the file name the same as that of the source_file or simply don't input this parameter as there is a default parameter here.
+                (This item does not include suffix names)
     Returns:
     str: Returns "success" if successful, or an error message if failed. 
          If an error occurs, notify the user of the reason for the error and apologize sincerely.
@@ -448,7 +464,7 @@ def task_endding(task_id: str, source_file: str, title: str = "") -> str:
         return "This file does not exist. Please check if the path is correct."
 
     if len(title) == 0:
-        _title = os.path.basename(source_file)
+        _title, _ = os.path.splitext(os.path.basename(source_file))
     else:
         _title = title
 
